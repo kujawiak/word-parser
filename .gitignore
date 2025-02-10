@@ -1,0 +1,7 @@
+*.docx
+*.bat
+kopie*
+obj
+bin
+810*
+.vscode
