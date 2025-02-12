@@ -338,27 +338,6 @@ namespace WordParser
             }
         }
 
-        // -------------
-
-        private StringValue? GetStyleID(string styleName = "Normalny")
-        {
-            return MainPart.StyleDefinitionsPart?.Styles?.Descendants<Style>()
-                                            .FirstOrDefault(s => s.StyleName?.Val == styleName)?.StyleId;
-        }
-        
-        internal void Save()
-        {
-            _wordDoc.Save();
-        }
-        
-        public void SaveAs(string newFilePath)
-        {
-            using (var newDoc = (WordprocessingDocument)_wordDoc.Clone(newFilePath))
-            {
-                newDoc.CompressionOption = CompressionOption.Maximum;
-                newDoc.Save();
-            }
-        }
         internal void MergeTexts()
         {
             var runs = MainPart.Document.Descendants<Run>().Where(r => r.Elements<Text>().Count() > 1).ToList();
@@ -391,6 +370,62 @@ namespace WordParser
 
                 run.InsertAfterSelf(newRun);
                 run.Remove();
+            }
+        }
+
+        // -------------
+
+        private StringValue? GetStyleID(string styleName = "Normalny")
+        {
+            return MainPart.StyleDefinitionsPart?.Styles?.Descendants<Style>()
+                                            .FirstOrDefault(s => s.StyleName?.Val == styleName)?.StyleId;
+        }
+        
+        internal void Save()
+        {
+            _wordDoc.Save();
+        }
+        
+        public void SaveAs(string newFilePath)
+        {
+            using (var newDoc = (WordprocessingDocument)_wordDoc.Clone(newFilePath))
+            {
+                newDoc.CompressionOption = CompressionOption.Maximum;
+                newDoc.Save();
+            }
+        }
+       
+        internal void GenerateXMLSchema()
+        {
+            var xmlPart = MainPart.AddNewPart<CustomXmlPart>("application/xml", "rIdLegalActStructure");
+            var xmlDoc = new System.Xml.XmlDocument();
+            var rootElement = xmlDoc.CreateElement("LegalAct");
+
+            foreach (var paragraph in MainPart.Document.Descendants<Paragraph>())
+            {
+                var pStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (pStyle != null)
+                {
+                    // var paragraphId = paragraph.GetFirstChild<ParagraphProperties>()?.GetFirstChild<ParagraphId>()?.Val;
+                    // if (paragraphId == null)
+                    // {
+                    //     paragraphId = "p" + Guid.NewGuid().ToString("N");
+                    //     var paragraphProperties = paragraph.ParagraphProperties ?? new ParagraphProperties();
+                    //     paragraphProperties.ParagraphId = new ParagraphId(paragraphId);
+                    //     paragraph.ParagraphProperties = paragraphProperties;
+                    // }
+                    // element.SetAttribute("ref", paragraphId);
+                    var element = xmlDoc.CreateElement(pStyle);
+                    element.InnerText = paragraph.InnerText;
+                    rootElement.AppendChild(element);
+                }
+            }
+
+            xmlDoc.AppendChild(rootElement);
+
+            using (var stream = xmlPart.GetStream(FileMode.Create, FileAccess.Write))
+            {
+                xmlDoc.Save(stream);
             }
         }
     }
