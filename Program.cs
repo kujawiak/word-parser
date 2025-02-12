@@ -78,13 +78,9 @@ namespace WordParser
                     }
                     else if (option == "--formatting")
                     {
-                        // legalAct.ClearTrackingChanges();
-                        // legalAct.RemoveFontChanges(legalAct.MainPart.Document);
-                        // legalAct.RemoveRsidAttributes(legalAct.MainPart.Document);
-                        legalAct.RemovePreserveAttributes(legalAct.MainPart.Document);
-                        // legalAct.CleanRunProperties(legalAct.MainPart.Document);
-                        //legalAct.MergeAdjacentRunsWithSameFormatting();
-                        // legalAct.ValidateFormat();
+                        legalAct.CleanParagraphProperties();
+                        legalAct.MergeRuns();
+                        legalAct.MergeTexts();
                     }
                     else
                     {
