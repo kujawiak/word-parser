@@ -1,9 +1,11 @@
 using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Office2010.Excel;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using System;
 using System.IO.Packaging;
 using System.Linq;
+using System.Xml;
 
 namespace WordParser
 {
@@ -113,7 +115,7 @@ namespace WordParser
                     var hyperlinkText = hyperlink.Descendants<Run>().Select(r => r.InnerText).FirstOrDefault();
                     var commentText = $"Hiperłącze: {hyperlinkUri}\nTekst: {hyperlinkText}";
 
-                    Console.WriteLine("Dodawanie komentarza: " + commentText);
+                    Console.WriteLine("[HLINKS]\tDodawanie komentarza: " + commentText);
 
                     AddComment(hyperlink, commentText);
 
@@ -195,8 +197,10 @@ namespace WordParser
             
             foreach (var paragraph in paragraphs)
             {
-                Console.WriteLine("Przetwarzanie paragrafu: " + paragraph.InnerText);
+                Console.WriteLine("[CLEANING]\tPrzetwarzanie paragrafu: " + paragraph.InnerText);
                 var newParagraph = new Paragraph();
+                var newParagraphId = Guid.NewGuid().ToString("N").Substring(0, 16);
+                newParagraph.ParagraphId = newParagraphId;
 
                 var paragraphProperties = paragraph.ParagraphProperties?.CloneNode(true) as ParagraphProperties;
                 if (paragraphProperties != null)
@@ -206,10 +210,10 @@ namespace WordParser
                     paragraphProperties.RemoveAllChildren();
                     if (pStyle != null)
                     {
-                        Console.WriteLine("Przenoszę styl paragrafu: " + pStyle.Val);
+                        Console.WriteLine("[CLEANING]\tPrzenoszę styl paragrafu: " + pStyle.Val);
                         paragraphProperties.AppendChild(pStyle.CloneNode(true));
                     } else {
-                        Console.WriteLine("Brak stylu paragrafu!");
+                        Console.WriteLine("[CLEANING]\tBrak stylu paragrafu!");
                         var firstRun = paragraph.Descendants<Run>().FirstOrDefault();
                         if (firstRun != null)
                             AddComment(firstRun, "Styl paragrafu nie zdefiniowany!");
@@ -223,7 +227,7 @@ namespace WordParser
                     var rsidAttributes = run.GetAttributes().Where(a => a.LocalName.Contains("rsid")).ToList();
                     foreach (var rsidAttribute in rsidAttributes)
                     {
-                        Console.WriteLine("Usuwam atrybut: " + rsidAttribute.LocalName);
+                        Console.WriteLine("[CLEANING]\tUsuwam atrybut: " + rsidAttribute.LocalName);
                         run.RemoveAttribute(rsidAttribute.LocalName, rsidAttribute.NamespaceUri);
                     }
 
@@ -239,7 +243,7 @@ namespace WordParser
                             .ToList();
                         foreach (var child in childrenToRemove)
                         {
-                            Console.WriteLine("Usuwam element: " + child.OuterXml);
+                            Console.WriteLine("[CLEANING]\tUsuwam element: " + child.OuterXml);
                             child.Remove();
                         }
                         if (!runProperties.HasChildren)
@@ -297,8 +301,8 @@ namespace WordParser
             foreach (var paragraph in paragraphs)
             {
                 var runs = paragraph.Elements<Run>().ToList();
-                Console.WriteLine("Przetwarzanie paragrafu: " + paragraph.InnerText);
-                Console.WriteLine("Liczba runów: " + runs.Count);
+                Console.WriteLine("[RUN_MERGE]\tPrzetwarzanie paragrafu: " + paragraph.InnerText);
+                Console.WriteLine("[RUN_MERGE]\tLiczba runów: " + runs.Count);
                 Run newRun = null;
 
                 foreach (var run in runs)
@@ -399,25 +403,51 @@ namespace WordParser
         {
             var xmlPart = MainPart.AddNewPart<CustomXmlPart>("application/xml", "rIdLegalActStructure");
             var xmlDoc = new System.Xml.XmlDocument();
-            var rootElement = xmlDoc.CreateElement("LegalAct");
+            var rootElement = xmlDoc.CreateElement("ustawa");
 
-            foreach (var paragraph in MainPart.Document.Descendants<Paragraph>())
+            foreach (var paragraph in MainPart.Document.Descendants<Paragraph>()
+                                                        .Where(p => p.InnerText.StartsWith("Art."))
+                                                        .ToList())
             {
-                var pStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
-                if (pStyle != null)
+                if (paragraph.ParagraphProperties == null)
                 {
-                    // var paragraphId = paragraph.GetFirstChild<ParagraphProperties>()?.GetFirstChild<ParagraphId>()?.Val;
-                    // if (paragraphId == null)
-                    // {
-                    //     paragraphId = "p" + Guid.NewGuid().ToString("N");
-                    //     var paragraphProperties = paragraph.ParagraphProperties ?? new ParagraphProperties();
-                    //     paragraphProperties.ParagraphId = new ParagraphId(paragraphId);
-                    //     paragraph.ParagraphProperties = paragraphProperties;
-                    // }
-                    // element.SetAttribute("ref", paragraphId);
-                    var element = xmlDoc.CreateElement(pStyle);
-                    element.InnerText = paragraph.InnerText;
-                    rootElement.AppendChild(element);
+                    Console.WriteLine("[XML]\t[ART]\tBrak właściwości paragrafu!");
+                    continue;
+                }
+                if (paragraph.ParagraphProperties.ParagraphStyleId == null)
+                {
+                    Console.WriteLine("[XML]\t[ART]\tBrak stylu paragrafu!");
+                    continue;
+                }
+                
+                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
+
+                if (paragraphStyle.ToString().StartsWith("ART"))
+                {
+                    Console.WriteLine("[XML]\t[ART]\tPrzetwarzanie paragrafu/artykułu: " + paragraph.InnerText);
+                    var isAmending = false;
+                    var paragraphText = System.Text.RegularExpressions.Regex.Replace(paragraph.InnerText, @"\s+", " ");
+                    var match = System.Text.RegularExpressions.Regex.Match(paragraphText, @"Art\. ([\w\d]+)\.");
+                    var articleNumber = match.Success ? match.Groups[1].Value : "Unknown";
+
+                    var articleElement = xmlDoc.CreateElement("artykul");
+                    articleElement.SetAttribute("numer", articleNumber);
+                    articleElement.SetAttribute("paraId", paragraph.ParagraphId?.ToString() ?? "Unknown");
+
+                    var dzURegex = new System.Text.RegularExpressions.Regex(@"Dz\.\sU\.\sz\s(\d{4})\sr\.\spoz\.\s(\d+)");
+                    var dzUMatch = dzURegex.Match(paragraphText);
+                    if (dzUMatch.Success)
+                    {
+                        isAmending = true;
+                        articleElement.SetAttribute("rok_publikatora", dzUMatch.Groups[1].Value);
+                        articleElement.SetAttribute("numer_publikatora", dzUMatch.Groups[2].Value);
+                    }
+
+                    articleElement.InnerText = paragraph.InnerText;
+                    
+                    rootElement.AppendChild(articleElement);
+                    GenerateXMLSchemaForAmendingPart(paragraph, articleElement, isAmending);
+                    GenerateXMLSchemaForArticle(paragraph, articleElement, isAmending);
                 }
             }
 
@@ -426,6 +456,108 @@ namespace WordParser
             using (var stream = xmlPart.GetStream(FileMode.Create, FileAccess.Write))
             {
                 xmlDoc.Save(stream);
+            }
+        }
+
+        private void GenerateXMLSchemaForAmendingPart(Paragraph nextParagraph, XmlElement rootElement, bool isAmending)
+        {
+            var nextParagraphs = nextParagraph.ElementsAfter().OfType<Paragraph>().ToList();
+            foreach (var paragraph in nextParagraphs)
+            {
+                System.Console.WriteLine("[XML]\t[Z]\tPrzetwarzanie paragrafu: " + paragraph.InnerText);
+                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
+                if (paragraphStyle != null)
+                {
+                    if (!paragraphStyle.ToString().StartsWith("Z"))
+                    {
+                        break;
+                    }
+                    var amendingElement = rootElement.OwnerDocument.CreateElement("zmiana_nowelizacyjna");
+                    amendingElement.InnerText = paragraph.InnerText;
+                    rootElement.AppendChild(amendingElement);
+                }
+            }
+        }
+
+        private void GenerateXMLSchemaForArticle(Paragraph paragraph, XmlElement articleElement, bool isAmending)
+        {
+            var nextParagraph = paragraph.NextSibling<Paragraph>();
+            while (nextParagraph != null && !nextParagraph.InnerText.StartsWith("Art."))
+            {
+                System.Console.WriteLine("[XML]\t[UST/PKT]\tPrzetwarzanie paragrafu: " + nextParagraph.InnerText);
+                var paragraphStyle = nextParagraph.ParagraphProperties?.ParagraphStyleId?.Val;
+                if (paragraphStyle != null)
+                {
+                    if (paragraphStyle.ToString().StartsWith("UST"))
+                    {
+                        var sectionElement = articleElement.OwnerDocument.CreateElement("ustep");
+                        sectionElement.InnerText = nextParagraph.InnerText;
+                        articleElement.AppendChild(sectionElement);
+                    } else if (paragraphStyle.ToString().StartsWith("PKT"))
+                    {
+                        var pointElement = articleElement.OwnerDocument.CreateElement("punkt");
+                        pointElement.InnerText = nextParagraph.InnerText;
+                        pointElement.SetAttribute("numer", nextParagraph.InnerText.Split(')')[0]);
+                        pointElement.SetAttribute("paraId", nextParagraph.ParagraphId?.ToString() ?? "Unknown");
+                        
+                        articleElement.AppendChild(pointElement);
+                        GenerateXMLSchemaForAmendingPart(nextParagraph, pointElement, isAmending);
+                        GenerateXMLSchemaForPoint(nextParagraph, pointElement, isAmending);
+                    }
+                }
+                nextParagraph = nextParagraph.NextSibling<Paragraph>();
+            }
+        }
+
+        private void GenerateXMLSchemaForPoint(Paragraph paragraph, XmlElement pointElement, bool isAmending)
+        {
+            var nextParagraph = paragraph.NextSibling<Paragraph>();
+            while (nextParagraph != null && !(nextParagraph.ParagraphProperties?.ParagraphStyleId?.Val?.ToString().StartsWith("PKT") == true))
+            {
+                System.Console.WriteLine("[XML]\t[LIT]\tPrzetwarzanie paragrafu: " + nextParagraph.InnerText);
+                var paragraphStyle = nextParagraph.ParagraphProperties?.ParagraphStyleId?.Val;
+                if (paragraphStyle != null)
+                {
+                    if (paragraphStyle.ToString().StartsWith("LIT"))
+                    {
+                        var letterElement = pointElement.OwnerDocument.CreateElement("litera");
+                        letterElement.InnerText = nextParagraph.InnerText;
+                        letterElement.SetAttribute("lit", nextParagraph.InnerText.Split(')')[0]);
+                        letterElement.SetAttribute("paraId", nextParagraph.ParagraphId?.ToString() ?? "Unknown");
+                        
+                        pointElement.AppendChild(letterElement);
+                        GenerateXMLSchemaForAmendingPart(nextParagraph, letterElement, isAmending);
+                        GenerateXMLSchemaForLetter(nextParagraph, letterElement, isAmending);
+                    }
+                }
+                nextParagraph = nextParagraph.NextSibling<Paragraph>();
+            }
+        }
+
+        private void GenerateXMLSchemaForLetter(Paragraph nextParagraph, XmlElement letterElement, bool isAmending)
+        {
+            var nextParagraphs = nextParagraph.ElementsAfter().OfType<Paragraph>().ToList();
+            foreach (var paragraph in nextParagraphs)
+            {
+                System.Console.WriteLine("[XML]\t[TIR]\tPrzetwarzanie paragrafu: " + paragraph.InnerText);
+                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
+                if (paragraphStyle != null)
+                {
+                    if (paragraphStyle.ToString().StartsWith("ART") || 
+                        paragraphStyle.ToString().StartsWith("UST") || 
+                        paragraphStyle.ToString().StartsWith("PKT"))
+                    {
+                        break;
+                    }
+                    if (paragraphStyle.ToString().StartsWith("TIR"))
+                    {
+                        var sectionElement = letterElement.OwnerDocument.CreateElement("tiret");
+                        sectionElement.InnerText = paragraph.InnerText;
+                        letterElement.AppendChild(sectionElement);
+
+                        GenerateXMLSchemaForAmendingPart(paragraph, letterElement, isAmending);
+                    }
+                }
             }
         }
     }
