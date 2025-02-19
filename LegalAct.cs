@@ -1,5 +1,4 @@
 using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Office2010.Excel;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using System;
@@ -16,10 +15,44 @@ namespace WordParser
         public MainDocumentPart MainPart { get; }
         public DocumentSettingsPart? SettingsPart { get; }
 
+        public Title Title { get; set; }
+        public List<Article> Articles { get; set; } = new List<Article>();
+
         public LegalAct(WordprocessingDocument wordDoc)
         {
             _wordDoc = wordDoc;
             MainPart = _wordDoc.MainDocumentPart ?? throw new InvalidOperationException("MainDocumentPart is null.");
+            Title = new Title(MainPart.Document.Descendants<Paragraph>()
+                                        .Where(p => p.ParagraphProperties != null 
+                                                && p.StyleId("TYTUAKT") == true).FirstOrDefault() ?? throw new InvalidOperationException("Title paragraph not found"));                                        // Tytuł #1
+            // Title.Parts.Add(new Part());                                // Dział #1
+            // Title.Parts[0].Chapters.Add(new Chapter());                 // Rozdział #1
+            // Title.Parts[0].Chapters[0].Sections.Add(new Section());     // Oddział #1
+            
+            foreach (var paragraph in MainPart.Document.Descendants<Paragraph>()
+                                                        .Where(p => p.InnerText.StartsWith("Art."))
+                                                        .ToList())
+            {
+                if (paragraph.ParagraphProperties == null)
+                {
+                    Console.WriteLine("[CTOR]\tBrak właściwości paragrafu!");
+                    continue;
+                }
+                if (paragraph.ParagraphProperties.ParagraphStyleId == null)
+                {
+                    Console.WriteLine("[CTOR]\tBrak stylu paragrafu!");
+                    continue;
+                }
+                
+                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
+
+                if (paragraphStyle != null && paragraphStyle?.ToString()?.StartsWith("ART") == true)
+                {
+                    Console.WriteLine("[CTOR]\tZnaleziono artykuł w paragrafie: " + paragraph.InnerText);
+                    Articles.Add(new Article(paragraph));
+                }
+            }
+            Console.WriteLine("Znaleziono artykułów: " + Articles.Count);
         }
 
         public void RemoveSystemComments()
@@ -396,14 +429,16 @@ namespace WordParser
             {
                 newDoc.CompressionOption = CompressionOption.Maximum;
                 newDoc.Save();
+                //System.IO.Compression.ZipFile.ExtractToDirectory(newFilePath, Path.GetDirectoryName(newFilePath));
             }
         }
        
         internal void GenerateXMLSchema()
         {
-            var xmlPart = MainPart.AddNewPart<CustomXmlPart>("application/xml", "rIdLegalActStructure");
+            //var xmlPart = MainPart.AddNewPart<CustomXmlPart>("application/xml", "rIdLegalActStructure");
+            CustomXmlPart xmlPart = MainPart.AddCustomXmlPart(CustomXmlPartType.CustomXml, "aktPrawny");
             var xmlDoc = new System.Xml.XmlDocument();
-            var rootElement = xmlDoc.CreateElement("ustawa");
+            var rootElement = xmlDoc.CreateElement("aktPrawny");
 
             foreach (var paragraph in MainPart.Document.Descendants<Paragraph>()
                                                         .Where(p => p.InnerText.StartsWith("Art."))
@@ -439,8 +474,11 @@ namespace WordParser
                     if (dzUMatch.Success)
                     {
                         isAmending = true;
-                        articleElement.SetAttribute("rok_publikatora", dzUMatch.Groups[1].Value);
-                        articleElement.SetAttribute("numer_publikatora", dzUMatch.Groups[2].Value);
+                        articleElement.SetAttribute("artykulNowelizujacy", "1");
+                        articleElement.SetAttribute("publikatorRok", dzUMatch.Groups[1].Value);
+                        articleElement.SetAttribute("publikatorNumer", dzUMatch.Groups[2].Value);
+                    } else {
+                        articleElement.SetAttribute("artykulNowelizujacy", "0");
                     }
 
                     articleElement.InnerText = paragraph.InnerText;
@@ -472,7 +510,7 @@ namespace WordParser
                     {
                         break;
                     }
-                    var amendingElement = rootElement.OwnerDocument.CreateElement("zmiana_nowelizacyjna");
+                    var amendingElement = rootElement.OwnerDocument.CreateElement("zmianaNowelizujaca");
                     amendingElement.InnerText = paragraph.InnerText;
                     rootElement.AppendChild(amendingElement);
                 }
@@ -560,5 +598,5 @@ namespace WordParser
                 }
             }
         }
-    }
-}
+    }    
+}   
