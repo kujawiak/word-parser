@@ -433,61 +433,13 @@ namespace WordParser
             }
         }
        
-        internal void GenerateXMLSchema()
+        internal void GenerateXML()
         {
-            //var xmlPart = MainPart.AddNewPart<CustomXmlPart>("application/xml", "rIdLegalActStructure");
             CustomXmlPart xmlPart = MainPart.AddCustomXmlPart(CustomXmlPartType.CustomXml, "aktPrawny");
             var xmlDoc = new System.Xml.XmlDocument();
-            var rootElement = xmlDoc.CreateElement("aktPrawny");
+            var rootElement = xmlDoc.CreateElement(XMLConstants.Root);
 
-            foreach (var paragraph in MainPart.Document.Descendants<Paragraph>()
-                                                        .Where(p => p.InnerText.StartsWith("Art."))
-                                                        .ToList())
-            {
-                if (paragraph.ParagraphProperties == null)
-                {
-                    Console.WriteLine("[XML]\t[ART]\tBrak właściwości paragrafu!");
-                    continue;
-                }
-                if (paragraph.ParagraphProperties.ParagraphStyleId == null)
-                {
-                    Console.WriteLine("[XML]\t[ART]\tBrak stylu paragrafu!");
-                    continue;
-                }
-                
-                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
-
-                if (paragraphStyle.ToString().StartsWith("ART"))
-                {
-                    Console.WriteLine("[XML]\t[ART]\tPrzetwarzanie paragrafu/artykułu: " + paragraph.InnerText);
-                    var isAmending = false;
-                    var paragraphText = System.Text.RegularExpressions.Regex.Replace(paragraph.InnerText, @"\s+", " ");
-                    var match = System.Text.RegularExpressions.Regex.Match(paragraphText, @"Art\. ([\w\d]+)\.");
-                    var articleNumber = match.Success ? match.Groups[1].Value : "Unknown";
-
-                    var articleElement = xmlDoc.CreateElement("artykul");
-                    articleElement.SetAttribute("numer", articleNumber);
-                    articleElement.SetAttribute("paraId", paragraph.ParagraphId?.ToString() ?? "Unknown");
-
-                    var dzURegex = new System.Text.RegularExpressions.Regex(@"Dz\.\sU\.\sz\s(\d{4})\sr\.\spoz\.\s(\d+)");
-                    var dzUMatch = dzURegex.Match(paragraphText);
-                    if (dzUMatch.Success)
-                    {
-                        isAmending = true;
-                        articleElement.SetAttribute("artykulNowelizujacy", "1");
-                        articleElement.SetAttribute("publikatorRok", dzUMatch.Groups[1].Value);
-                        articleElement.SetAttribute("publikatorNumer", dzUMatch.Groups[2].Value);
-                    } else {
-                        articleElement.SetAttribute("artykulNowelizujacy", "0");
-                    }
-
-                    articleElement.InnerText = paragraph.InnerText;
-                    
-                    rootElement.AppendChild(articleElement);
-                    GenerateXMLSchemaForAmendingPart(paragraph, articleElement, isAmending);
-                    GenerateXMLSchemaForArticle(paragraph, articleElement, isAmending);
-                }
-            }
+            ProcessArticles(xmlDoc, rootElement, Articles);
 
             xmlDoc.AppendChild(rootElement);
 
@@ -495,107 +447,107 @@ namespace WordParser
             {
                 xmlDoc.Save(stream);
             }
+            var xmlFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LegalAct.xml");
+            xmlDoc.Save(xmlFilePath);
+            Console.WriteLine($"XML file saved at: {xmlFilePath}");
         }
-
-        private void GenerateXMLSchemaForAmendingPart(Paragraph nextParagraph, XmlElement rootElement, bool isAmending)
+    
+        private void ProcessAmendments(XmlDocument xmlDoc, XmlElement parentElement, IEnumerable<Amendment> amendments, string amendmentType)
         {
-            var nextParagraphs = nextParagraph.ElementsAfter().OfType<Paragraph>().ToList();
-            foreach (var paragraph in nextParagraphs)
+            foreach (var amendment in amendments)
             {
-                System.Console.WriteLine("[XML]\t[Z]\tPrzetwarzanie paragrafu: " + paragraph.InnerText);
-                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
-                if (paragraphStyle != null)
-                {
-                    if (!paragraphStyle.ToString().StartsWith("Z"))
-                    {
-                        break;
-                    }
-                    var amendingElement = rootElement.OwnerDocument.CreateElement("zmianaNowelizujaca");
-                    amendingElement.InnerText = paragraph.InnerText;
-                    rootElement.AppendChild(amendingElement);
-                }
+                Console.WriteLine($"[XML]\t[{amendmentType}]\tPrzetwarzanie nowelizacji: " + amendment.Content);
+                var amendmentElement = xmlDoc.CreateElement(XMLConstants.Amendment);
+                amendmentElement.InnerText = amendment.Content;
+                parentElement.AppendChild(amendmentElement);
             }
         }
 
-        private void GenerateXMLSchemaForArticle(Paragraph paragraph, XmlElement articleElement, bool isAmending)
+        private void ProcessArticles(XmlDocument xmlDoc, XmlElement rootElement, IEnumerable<Article> articles)
         {
-            var nextParagraph = paragraph.NextSibling<Paragraph>();
-            while (nextParagraph != null && !nextParagraph.InnerText.StartsWith("Art."))
+            foreach (var article in articles)
             {
-                System.Console.WriteLine("[XML]\t[UST/PKT]\tPrzetwarzanie paragrafu: " + nextParagraph.InnerText);
-                var paragraphStyle = nextParagraph.ParagraphProperties?.ParagraphStyleId?.Val;
-                if (paragraphStyle != null)
+                Console.WriteLine("[XML]\t[ART]\tPrzetwarzanie artykułu: " + article.Content);
+                var articleElement = xmlDoc.CreateElement(XMLConstants.Article);
+                articleElement.SetAttribute(XMLConstants.Number, article.Number);
+                articleElement.SetAttribute(XMLConstants.Amending, article.IsAmending ? "1" : "0");
+
+                if (article.IsAmending)
                 {
-                    if (paragraphStyle.ToString().StartsWith("UST"))
-                    {
-                        var sectionElement = articleElement.OwnerDocument.CreateElement("ustep");
-                        sectionElement.InnerText = nextParagraph.InnerText;
-                        articleElement.AppendChild(sectionElement);
-                    } else if (paragraphStyle.ToString().StartsWith("PKT"))
-                    {
-                        var pointElement = articleElement.OwnerDocument.CreateElement("punkt");
-                        pointElement.InnerText = nextParagraph.InnerText;
-                        pointElement.SetAttribute("numer", nextParagraph.InnerText.Split(')')[0]);
-                        pointElement.SetAttribute("paraId", nextParagraph.ParagraphId?.ToString() ?? "Unknown");
-                        
-                        articleElement.AppendChild(pointElement);
-                        GenerateXMLSchemaForAmendingPart(nextParagraph, pointElement, isAmending);
-                        GenerateXMLSchemaForPoint(nextParagraph, pointElement, isAmending);
-                    }
+                    articleElement.SetAttribute(XMLConstants.PublicationYear, article.PublicationYear);
+                    articleElement.SetAttribute(XMLConstants.PublicationNumber, article.PublicationNumber);
                 }
-                nextParagraph = nextParagraph.NextSibling<Paragraph>();
+
+                rootElement.AppendChild(articleElement);
+                ProcessSubsections(xmlDoc, articleElement, article.Subsections);
             }
         }
 
-        private void GenerateXMLSchemaForPoint(Paragraph paragraph, XmlElement pointElement, bool isAmending)
+        private void ProcessSubsections(XmlDocument xmlDoc, XmlElement parentElement, IEnumerable<Subsection> subsections)
         {
-            var nextParagraph = paragraph.NextSibling<Paragraph>();
-            while (nextParagraph != null && !(nextParagraph.ParagraphProperties?.ParagraphStyleId?.Val?.ToString().StartsWith("PKT") == true))
+            foreach (var subsection in subsections)
             {
-                System.Console.WriteLine("[XML]\t[LIT]\tPrzetwarzanie paragrafu: " + nextParagraph.InnerText);
-                var paragraphStyle = nextParagraph.ParagraphProperties?.ParagraphStyleId?.Val;
-                if (paragraphStyle != null)
+                Console.WriteLine("[XML]\t[UST]\tPrzetwarzanie ustepu: " + subsection.Content);
+                var subsectionElement = xmlDoc.CreateElement(XMLConstants.Subsection);
+                subsectionElement.InnerText = subsection.Content;
+                subsectionElement.SetAttribute(XMLConstants.Number, subsection.Number.ToString());
+                parentElement.AppendChild(subsectionElement);
+
+                if (subsection.Amendments.Any())
                 {
-                    if (paragraphStyle.ToString().StartsWith("LIT"))
-                    {
-                        var letterElement = pointElement.OwnerDocument.CreateElement("litera");
-                        letterElement.InnerText = nextParagraph.InnerText;
-                        letterElement.SetAttribute("lit", nextParagraph.InnerText.Split(')')[0]);
-                        letterElement.SetAttribute("paraId", nextParagraph.ParagraphId?.ToString() ?? "Unknown");
-                        
-                        pointElement.AppendChild(letterElement);
-                        GenerateXMLSchemaForAmendingPart(nextParagraph, letterElement, isAmending);
-                        GenerateXMLSchemaForLetter(nextParagraph, letterElement, isAmending);
-                    }
+                    ProcessAmendments(xmlDoc, subsectionElement, subsection.Amendments, "ZUST");
                 }
-                nextParagraph = nextParagraph.NextSibling<Paragraph>();
+
+                ProcessPoints(xmlDoc, subsectionElement, subsection.Points);
             }
         }
 
-        private void GenerateXMLSchemaForLetter(Paragraph nextParagraph, XmlElement letterElement, bool isAmending)
+        private void ProcessPoints(XmlDocument xmlDoc, XmlElement parentElement, IEnumerable<Point> points)
         {
-            var nextParagraphs = nextParagraph.ElementsAfter().OfType<Paragraph>().ToList();
-            foreach (var paragraph in nextParagraphs)
+            foreach (var point in points)
             {
-                System.Console.WriteLine("[XML]\t[TIR]\tPrzetwarzanie paragrafu: " + paragraph.InnerText);
-                var paragraphStyle = paragraph.ParagraphProperties?.ParagraphStyleId?.Val;
-                if (paragraphStyle != null)
-                {
-                    if (paragraphStyle.ToString().StartsWith("ART") || 
-                        paragraphStyle.ToString().StartsWith("UST") || 
-                        paragraphStyle.ToString().StartsWith("PKT"))
-                    {
-                        break;
-                    }
-                    if (paragraphStyle.ToString().StartsWith("TIR"))
-                    {
-                        var sectionElement = letterElement.OwnerDocument.CreateElement("tiret");
-                        sectionElement.InnerText = paragraph.InnerText;
-                        letterElement.AppendChild(sectionElement);
+                Console.WriteLine("[XML]\t[PKT]\tPrzetwarzanie punktu: " + point.Content);
+                var pointElement = xmlDoc.CreateElement(XMLConstants.Point);
+                pointElement.InnerText = point.Content;
+                pointElement.SetAttribute(XMLConstants.Number, point.Number);
+                parentElement.AppendChild(pointElement);
 
-                        GenerateXMLSchemaForAmendingPart(paragraph, letterElement, isAmending);
-                    }
+                if (point.Amendments.Any())
+                {
+                    ProcessAmendments(xmlDoc, pointElement, point.Amendments, "ZPKT");
                 }
+
+                ProcessLetters(xmlDoc, pointElement, point.Letters);
+            }
+        }
+
+        private void ProcessLetters(XmlDocument xmlDoc, XmlElement parentElement, IEnumerable<Letter> letters)
+        {
+            foreach (var letter in letters)
+            {
+                Console.WriteLine("[XML]\t[LIT]\tPrzetwarzanie litery: " + letter.Content);
+                var letterElement = xmlDoc.CreateElement(XMLConstants.Letter);
+                letterElement.InnerText = letter.Content;
+                letterElement.SetAttribute(XMLConstants.LetterOrdinal, letter.Ordinal);
+                parentElement.AppendChild(letterElement);
+
+                if (letter.Amendments.Any())
+                {
+                    ProcessAmendments(xmlDoc, letterElement, letter.Amendments, "ZLIT");
+                }
+
+                ProcessTirets(xmlDoc, letterElement, letter.Tirets);
+            }
+        }
+        
+        private void ProcessTirets(XmlDocument xmlDoc, XmlElement parentElement, IEnumerable<Tiret> tirets)
+        {
+            foreach (var tiret in tirets)
+            {
+                Console.WriteLine("[XML]\t[TIR]\tPrzetwarzanie tiretu: " + tiret.Content);
+                var tiretElement = xmlDoc.CreateElement(XMLConstants.Tiret);
+                tiretElement.InnerText = tiret.Content;
+                parentElement.AppendChild(tiretElement);
             }
         }
     }    

@@ -3,7 +3,8 @@ using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace WordParser
 {
-    public class BaseEntity {
+    public class BaseEntity 
+    {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Content { get; set; }
         public Paragraph? Paragraph { get; set; }
@@ -14,8 +15,15 @@ namespace WordParser
         }
     }
 
+    public interface IAmendable
+    {
+        List<Amendment> Amendments { get; set; }
+    }
+
     // Tytuł
-    public class Title : BaseEntity {
+    public class Title : BaseEntity 
+    {   
+        public string TitleText { get; set; }
         public List<Part> Parts { get; set; } = new List<Part>();
 
         public Title(Paragraph paragraph) : base(paragraph)
@@ -24,17 +32,26 @@ namespace WordParser
     }
 
     // Dział 
-    public class Part {
+    public class Part 
+    {
+        Title Parent { get; set; }
+        public string Number { get; set; }
         public List<Chapter> Chapters { get; set; }
     }
 
     // Rozdział
-    public class Chapter {
+    public class Chapter 
+    {
+        Part Parent { get; set; }
+        public string Number { get; set; }
         public List<Section> Sections { get; set; }
     }
 
     // Oddział
-    public class Section {
+    public class Section 
+    {
+        Chapter Parent { get; set; }
+        public string Number { get; set; }
         public List<Article> Articles { get; set; }
 
         internal void AddArticle(Paragraph paragraph)
@@ -61,9 +78,9 @@ namespace WordParser
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("ART") != true)
             {
-                ordinal++;
                 if (nextParagraph.StyleId("UST") == true)
                 {
+                    ordinal++;
                     Subsections.Add(new Subsection(nextParagraph, this, ordinal));
                 }
                 paragraph = nextParagraph;
@@ -91,16 +108,25 @@ namespace WordParser
     }
 
     // Ustęp
-    public class Subsection : BaseEntity {
+    public class Subsection : BaseEntity, IAmendable {
         public Article Parent { get; set; }
         public List<Point> Points { get; set; }
         public int Number { get; set; }
+        public List<Amendment> Amendments { get; set; }
 
-        public Subsection(Paragraph paragraph, Article parent, int ordinal = 1) : base(paragraph)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Subsection"/> class.
+        /// </summary>
+        /// <param name="paragraph">The paragraph associated with this subsection.</param>
+        /// <param name="article">The parent article of this subsection.</param>
+        /// <param name="ordinal">The ordinal number of this subsection. Default is 1.</param>
+        public Subsection(Paragraph paragraph, Article article, int ordinal = 1) : base(paragraph)
         {
-            Parent = parent;
+            Parent = article;
             Number = ordinal;
             Points = new List<Point>();
+            Amendments = new List<Amendment>();
+            bool isAdjacent = true;
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("UST") != true
                     && nextParagraph.StyleId("ART") != true)
@@ -108,6 +134,15 @@ namespace WordParser
                 if (nextParagraph.StyleId("PKT") == true)
                 {
                     Points.Add(new Point(nextParagraph, this));
+                    isAdjacent = false;
+                }
+                else if (nextParagraph.StyleId("Z") == true && isAdjacent)
+                {
+                    Amendments.Add(new Amendment(nextParagraph, this));
+                }
+                else 
+                {
+                    isAdjacent = false;
                 }
                 paragraph = nextParagraph;
             }
@@ -115,15 +150,18 @@ namespace WordParser
     }
 
     // Punkt
-    public class Point : BaseEntity {
+    public class Point : BaseEntity, IAmendable {
         public Subsection Parent { get; set; }
         public List<Letter> Letters { get; set; }
+        public List<Amendment> Amendments { get; set; }
         public string Number { get; set; }
         public Point(Paragraph paragraph, Subsection parent) : base(paragraph)
         {
             Parent = parent;
             Number = Content.ExtractOrdinal();
             Letters = new List<Letter>();
+            Amendments = new List<Amendment>();
+            bool isAdjacent = true;
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("PKT") != true
                     && nextParagraph.StyleId("UST") != true
@@ -132,6 +170,15 @@ namespace WordParser
                 if (nextParagraph.StyleId("LIT") == true)
                 {
                     Letters.Add(new Letter(nextParagraph, this));
+                    isAdjacent = false;
+                }
+                else if (nextParagraph.StyleId("Z") == true && isAdjacent == true)
+                {
+                    Amendments.Add(new Amendment(nextParagraph, this));
+                }
+                else 
+                {
+                    isAdjacent = false;
                 }
                 paragraph = nextParagraph;
             }
@@ -139,16 +186,20 @@ namespace WordParser
     }
 
     // Litera
-    public class Letter : BaseEntity {
+    public class Letter : BaseEntity, IAmendable {
         public Point Parent { get; set; }
         public List<Tiret> Tirets { get; set; }
         public string Ordinal { get; set; }
+        public List<Amendment> Amendments { get; set; }
 
         public Letter(Paragraph paragraph, Point parent) : base(paragraph)
         {
             Parent = parent;
             Ordinal = Content.ExtractOrdinal();
             Tirets = new List<Tiret>();
+            Amendments = new List<Amendment>();
+            bool isAdjacent = true;
+            var tiretCount = 1;
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("LIT") != true
                     && nextParagraph.StyleId("PKT") != true
@@ -157,7 +208,16 @@ namespace WordParser
             {
                 if (nextParagraph.StyleId("TIRET") == true)
                 {
-                    Tirets.Add(new Tiret(nextParagraph));
+                    Tirets.Add(new Tiret(nextParagraph, this, tiretCount));
+                    tiretCount++;
+                }
+                else if (nextParagraph.StyleId("Z") == true && isAdjacent == true)
+                {
+                    Amendments.Add(new Amendment(nextParagraph, this));
+                }
+                else 
+                {
+                    isAdjacent = false;
                 }
                 paragraph = nextParagraph;
             }
@@ -166,8 +226,20 @@ namespace WordParser
 
     // Tiret
     public class Tiret : BaseEntity {
-        public Tiret(Paragraph paragraph) : base(paragraph)
+        Letter Parent { get; set; }
+        public int Number { get; set; }
+        public Tiret(Paragraph paragraph, Letter parent, int ordinal = 1) : base(paragraph)
         {
+            Parent = parent;
+            Number = ordinal;
+        }
+    }
+
+    public class Amendment : BaseEntity
+    {
+        public Amendment(Paragraph paragraph, BaseEntity parent) : base(paragraph)
+        {
+            
         }
     }
 }

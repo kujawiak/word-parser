@@ -81,7 +81,7 @@ namespace WordParser
                         legalAct.CleanParagraphProperties();
                         legalAct.MergeRuns();
                         legalAct.MergeTexts();
-                        legalAct.GenerateXMLSchema();
+                        legalAct.GenerateXML();
                     }
                     else
                     {
