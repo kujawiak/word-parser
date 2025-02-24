@@ -511,6 +511,34 @@ namespace WordParser
                 Console.WriteLine("[XML]\t[PKT]\tPrzetwarzanie punktu: " + point.Content);
                 var pointElement = xmlDoc.CreateElement(XMLConstants.Point);
                 pointElement.InnerText = point.Content;
+                if (point.AmendmentOperations.Any())
+                {
+                    foreach (var amendmentOperation in point.AmendmentOperations)
+                    {
+                        var amendmentElement = xmlDoc.CreateElement("pn");
+                        amendmentElement.SetAttribute("typ", amendmentOperation.Type.ToDescription());
+                        //TODO - check for every target
+                        var amendmentTarget = amendmentOperation.AmendmentTargets.FirstOrDefault();
+                        if (amendmentTarget?.Article != null)
+                        {
+                            amendmentElement.SetAttribute("artykul", amendmentTarget.Article);
+                        }
+                        if (amendmentTarget?.Subsection != null)
+                        {
+                            amendmentElement.SetAttribute("ustep", amendmentTarget.Subsection);
+                        }
+                        if (amendmentTarget?.Point != null)
+                        {
+                            amendmentElement.SetAttribute("punkt", amendmentTarget.Point);
+                        }
+                        if (amendmentTarget?.Letter != null)
+                        {
+                            amendmentElement.SetAttribute("litera", amendmentTarget.Letter);
+                        }
+                        pointElement.AppendChild(amendmentElement);
+                    }
+                }
+
                 pointElement.SetAttribute(XMLConstants.Number, point.Number);
                 parentElement.AppendChild(pointElement);
 

@@ -4,7 +4,7 @@ using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace WordParser.Model
 {
-        public class Amendment : BaseEntity
+    public class Amendment : BaseEntity
     {
         public BaseEntity Parent { get; set; }
         public Amendment(Paragraph paragraph, BaseEntity parent) : base(paragraph)
@@ -26,8 +26,11 @@ namespace WordParser.Model
                 var pkt = Point?.Content;
                 var lit = Letter?.Content;
                 var tir = Tiret?.Content;
-                var parts = new List<string>();
-                if (!string.IsNullOrEmpty(art)) parts.Add(art);
+                var parts = new List<string>
+                {
+                    Article?.PublicationNumber?.ToString() ?? string.Empty,
+                    Article?.PublicationYear?.ToString() ?? string.Empty
+                };
                 // if (!string.IsNullOrEmpty(ust)) parts.Add(ust);
                 if (!string.IsNullOrEmpty(pkt)) parts.Add(pkt);
                 if (!string.IsNullOrEmpty(lit)) parts.Add(lit);

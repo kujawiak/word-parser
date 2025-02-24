@@ -21,11 +21,6 @@ namespace WordParser.Model
             Amendments = new List<Amendment>();
             bool isAdjacent = true;
             var tiretCount = 1;
-            // TODO: hardcoded string
-            if (Article != null && Article.IsAmending && Content.Contains("uchyla się"))
-            {
-                Amendments.Add(new Amendment(paragraph, this));
-            }
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("LIT") != true
                     && nextParagraph.StyleId("PKT") != true

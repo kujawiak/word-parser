@@ -14,15 +14,11 @@ namespace WordParser.Model
             Article = parent.Parent;
             Subsection = parent;
             Parent = parent;
-            Subsection = parent;
             Number = Content.ExtractOrdinal();
             Letters = new List<Letter>();
             Amendments = new List<Amendment>();
             bool isAdjacent = true;
-            if (Article.IsAmending && Content.Contains("uchyla się"))
-            {
-                Amendments.Add(new Amendment(paragraph, this));
-            }
+            if (Article.IsAmending) TryParseAmendingOperation();
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("PKT") != true
                     && nextParagraph.StyleId("UST") != true
