@@ -19,11 +19,15 @@ namespace WordParser.Model
             Letters = new List<Letter>();
             Amendments = new List<Amendment>();
             bool isAdjacent = true;
+            if (Article.IsAmending && Content.Contains("uchyla się"))
+            {
+                Amendments.Add(new Amendment(paragraph, this));
+            }
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("PKT") != true
                     && nextParagraph.StyleId("UST") != true
                     && nextParagraph.StyleId("ART") != true)
-            {
+            {                
                 if (nextParagraph.StyleId("LIT") == true)
                 {
                     Letters.Add(new Letter(nextParagraph, this));
