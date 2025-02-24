@@ -6,7 +6,8 @@ namespace WordParser
     {
         public static string Sanitize(this string input)
         {
-            return Regex.Replace(input, @"\s+", " ");
+            input = Regex.Replace(input, @"\s+", " ");
+            return input.Replace("–", "-");
         }
 
         public static string ExtractOrdinal(this string input)
