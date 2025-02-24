@@ -78,10 +78,11 @@ namespace WordParser
                     }
                     else if (option == "--formatting")
                     {
-                        legalAct.CleanParagraphProperties();
-                        legalAct.MergeRuns();
-                        legalAct.MergeTexts();
+                        // legalAct.CleanParagraphProperties();
+                        // legalAct.MergeRuns();
+                        // legalAct.MergeTexts();
                         legalAct.GenerateXML();
+                        legalAct.SaveAmendmentList();
                     }
                     else
                     {
@@ -99,11 +100,11 @@ namespace WordParser
                     // Zapisz dokument pod nową nazwą
                     legalAct.SaveAs(newFilePath);
                 }
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = filePath,
-                    UseShellExecute = true
-                });
+                // System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                // {
+                //     FileName = filePath,
+                //     UseShellExecute = true
+                // });
             }
             Console.ReadLine(); 
         }
