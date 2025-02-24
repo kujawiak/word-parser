@@ -5,6 +5,7 @@ using System;
 using System.IO.Packaging;
 using System.Linq;
 using System.Xml;
+using WordParser.Model;
 
 namespace WordParser
 {
