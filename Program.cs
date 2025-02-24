@@ -78,9 +78,12 @@ namespace WordParser
                     }
                     else if (option == "--formatting")
                     {
-                        // legalAct.CleanParagraphProperties();
-                        // legalAct.MergeRuns();
-                        // legalAct.MergeTexts();
+                        legalAct.CleanParagraphProperties();
+                        legalAct.MergeRuns();
+                        legalAct.MergeTexts();
+                    }
+                    else if (option == "--generatexml")
+                    {
                         legalAct.GenerateXML();
                         legalAct.SaveAmendmentList();
                     }
