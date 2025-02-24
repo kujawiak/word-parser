@@ -459,6 +459,7 @@ namespace WordParser
                 Console.WriteLine($"[XML]\t[{amendmentType}]\tPrzetwarzanie nowelizacji: " + amendment.Content);
                 var amendmentElement = xmlDoc.CreateElement(XMLConstants.Amendment);
                 amendmentElement.InnerText = amendment.Content;
+                amendmentElement.SetAttribute("ustawaZmieniana", amendment.AmendedAct);
                 parentElement.AppendChild(amendmentElement);
             }
         }
@@ -548,6 +549,29 @@ namespace WordParser
                 var tiretElement = xmlDoc.CreateElement(XMLConstants.Tiret);
                 tiretElement.InnerText = tiret.Content;
                 parentElement.AppendChild(tiretElement);
+            }
+        }
+
+        internal void SaveAmendmentList()
+        {
+            var allAmendments = new List<string>();
+            foreach (Article article in Articles)
+            {
+                if (article.AmendmentList != null && article.AmendmentList.Any())
+                {
+                    allAmendments.AddRange(article.AmendmentList);
+                }
+            }
+            if (allAmendments.Any())
+            {
+                allAmendments = allAmendments.Distinct().ToList();
+                var amendmentsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "nowele.txt");
+                File.WriteAllLines(amendmentsFilePath, allAmendments);
+                Console.WriteLine($"Amendments list saved at: {amendmentsFilePath}");
+            }
+            else
+            {
+                Console.WriteLine("No amendments found to save.");
             }
         }
     }    

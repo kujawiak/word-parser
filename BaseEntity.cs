@@ -5,6 +5,10 @@ namespace WordParser
 {
     public class BaseEntity 
     {
+        public Article? Article { get; set; }
+        public Subsection? Subsection { get; set; }
+        public Point? Point { get; set; }
+        public Letter? Letter { get; set; }
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Content { get; set; }
         public Paragraph? Paragraph { get; set; }
@@ -68,12 +72,14 @@ namespace WordParser
         public string? PublicationYear { get; set; }
         public string? PublicationNumber { get; set; }
         public List<Subsection> Subsections { get; set; }
+        public List<string> AmendmentList { get; set; }
 
         public Article(Paragraph paragraph) : base(paragraph)
         {
             Number = SetNumber();
             IsAmending = SetAmendment();
             Subsections = [new Subsection(paragraph, this)];
+            AmendmentList = new List<string>();
             var ordinal = 1;
             while (paragraph.NextSibling() is Paragraph nextParagraph 
                     && nextParagraph.StyleId("ART") != true)
@@ -123,6 +129,7 @@ namespace WordParser
         public Subsection(Paragraph paragraph, Article article, int ordinal = 1) : base(paragraph)
         {
             Parent = article;
+            Article = article;
             Number = ordinal;
             Points = new List<Point>();
             Amendments = new List<Amendment>();
@@ -157,7 +164,10 @@ namespace WordParser
         public string Number { get; set; }
         public Point(Paragraph paragraph, Subsection parent) : base(paragraph)
         {
+            Article = parent.Parent;
+            Subsection = parent;
             Parent = parent;
+            Subsection = parent;
             Number = Content.ExtractOrdinal();
             Letters = new List<Letter>();
             Amendments = new List<Amendment>();
@@ -194,6 +204,9 @@ namespace WordParser
 
         public Letter(Paragraph paragraph, Point parent) : base(paragraph)
         {
+            Article = parent.Article;
+            Subsection = parent.Subsection;
+            Point = parent;
             Parent = parent;
             Ordinal = Content.ExtractOrdinal();
             Tirets = new List<Tiret>();
@@ -230,6 +243,10 @@ namespace WordParser
         public int Number { get; set; }
         public Tiret(Paragraph paragraph, Letter parent, int ordinal = 1) : base(paragraph)
         {
+            Article = parent.Article;
+            Subsection = parent.Subsection;
+            Point = parent.Point;
+            Letter = parent;
             Parent = parent;
             Number = ordinal;
         }
@@ -237,9 +254,33 @@ namespace WordParser
 
     public class Amendment : BaseEntity
     {
+        public BaseEntity Parent { get; set; }
         public Amendment(Paragraph paragraph, BaseEntity parent) : base(paragraph)
         {
-            
+            Article = parent.Article ?? (parent as Article);
+            Subsection = parent.Subsection ?? (parent as Subsection);
+            Point = parent.Point ?? (parent as Point);
+            Letter = parent.Letter ?? (parent as Letter);
+            Parent = parent;
+            Paragraph = paragraph;
+        }
+
+        public string? AmendedAct { 
+            get
+            {
+                var art = Article?.Content;
+                var ust = Subsection?.Content;
+                var pkt = Point?.Content;
+                var lit = Letter?.Content;
+                var parts = new List<string>();
+                if (!string.IsNullOrEmpty(art)) parts.Add(art);
+                //if (!string.IsNullOrEmpty(ust)) parts.Add(ust);
+                if (!string.IsNullOrEmpty(pkt)) parts.Add(pkt);
+                if (!string.IsNullOrEmpty(lit)) parts.Add(lit);
+                var regexInput = parts.Count > 0 ? string.Join("|", parts) : null;
+                Parent.Article.AmendmentList.Add(regexInput);
+                return regexInput.GetAmendingProcedure();
+            }
         }
     }
 }
