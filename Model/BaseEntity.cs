@@ -10,6 +10,7 @@ namespace WordParser.Model
         public Subsection? Subsection { get; set; }
         public Point? Point { get; set; }
         public Letter? Letter { get; set; }
+        public Tiret? Tiret { get; set; }
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Content { get; set; }
         public Paragraph? Paragraph { get; set; }
