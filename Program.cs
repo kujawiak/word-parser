@@ -61,6 +61,7 @@ namespace WordParser
                     {
                         legalAct.GenerateXML();
                         legalAct.SaveAmendmentList();
+                        legalAct.CommentErrors();
                     }
                     else
                     {
