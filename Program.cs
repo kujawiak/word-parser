@@ -44,24 +44,28 @@ namespace WordParser
                     var legalAct = new WordParserLibrary.LegalAct(wordDoc);
 
                     // Usuwanie komentarzy autora 'System'
-                    legalAct.RemoveSystemComments();
+                    legalAct.CommentManager.RemoveSystemComments();
 
                     if (option == "--hyperlinks")
                     {
-                        int commentCount = legalAct.ParseHyperlinks();
+                        int commentCount = legalAct.DocumentProcessor.ParseHyperlinks();
                         Console.WriteLine($"Liczba dodanych komentarzy: {commentCount}");
                     }
                     else if (option == "--formatting")
                     {
-                        legalAct.CleanParagraphProperties();
-                        legalAct.MergeRuns();
-                        legalAct.MergeTexts();
+                        legalAct.DocumentProcessor.CleanParagraphProperties();
+                        legalAct.DocumentProcessor.MergeRuns();
+                        legalAct.DocumentProcessor.MergeTexts();
                     }
                     else if (option == "--generatexml")
                     {
-                        legalAct.GenerateXML();
+                        legalAct.XmlGenerator.Generate();
                         legalAct.SaveAmendmentList();
-                        legalAct.CommentErrors();
+                        legalAct.CommentManager.CommentErrors();
+                    }
+                    else if (option == "--docx")
+                    {
+                        legalAct.DocxGenerator.Generate();
                     }
                     else
                     {
