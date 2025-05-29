@@ -61,11 +61,24 @@ namespace WordParser
                     {
                         legalAct.XmlGenerator.Generate();
                         legalAct.SaveAmendmentList();
-                        legalAct.CommentManager.CommentErrors();
+                        legalAct.CommentManager.CommentErrors(legalAct);
                     }
                     else if (option == "--docx")
                     {
                         legalAct.DocxGenerator.Generate();
+                    }
+                    else if (option == "--createAmendmentsTable")
+                    {
+                        using var stream = legalAct.XlsxGenerator.GenerateXlsx();
+                        string xlsxFileName = Path.GetFileNameWithoutExtension(filePath) + "_amendments.xlsx";
+                        string xlsxFilePath = Path.Combine(directoryName, xlsxFileName);
+
+                        using (var fileStream = File.Create(xlsxFilePath))
+                        {
+                            stream.CopyTo(fileStream);
+                        }
+
+                        Console.WriteLine($"Utworzono plik: {xlsxFilePath}");
                     }
                     else
                     {
