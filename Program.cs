@@ -4,6 +4,7 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using ModelDto;
 using ModelDto.EditorialUnits;
+using Serilog;
 using WordParserLibrary;
 
 namespace WordParser
@@ -12,6 +13,10 @@ namespace WordParser
     {
         static void Main(string[] args)
         {
+            LoggerConfig.ConfigureLogger();
+
+            try
+            {
             if (args.Length < 2)
             {
                 Console.WriteLine("Użycie: WordParser --docx <nazwa-pliku>");
@@ -111,6 +116,11 @@ namespace WordParser
                 // });
             }
             //Console.ReadLine(); 
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
         }
 
         private static void PrintDocument(LegalDocument document)
@@ -134,7 +144,7 @@ namespace WordParser
         {
             // Nie pokazujmy treści artykułu - jest nią treść pierwszego ustępu
             // Zamiast tego pokażmy informację o tym, czy artykuł jest nowelizujący i ewentualnie jego publikator (Dz. U.)
-            Console.WriteLine($"  [{article.Id}] " + (article.IsAmending ? article.Journals.FirstOrDefault()?.ToString() : string.Empty));
+            Console.WriteLine($"  [{article.Id}] " + (article.IsAmending ? "artykuł zmieniający akt: " + article.Journals.FirstOrDefault()?.ToString() : string.Empty));
 
             foreach (var paragraph in article.Paragraphs)
             {
@@ -252,47 +262,43 @@ namespace WordParser
 
         private static void PrintAmendments(BaseEntity entity, string indent)
         {
-            if (entity is not IHasAmendments hasAmendments || hasAmendments.Amendments.Count == 0)
+            if (entity is not IHasAmendments { Amendment: { } amendment })
             {
                 return;
             }
 
-            for (int i = 0; i < hasAmendments.Amendments.Count; i++)
+            var opLabel = amendment.OperationType switch
             {
-                var amendment = hasAmendments.Amendments[i];
-                var opLabel = amendment.OperationType switch
-                {
-                    AmendmentOperationType.Repeal => "UCHYLENIE",
-                    AmendmentOperationType.Insertion => "DODANIE",
-                    AmendmentOperationType.Modification => "ZMIANA BRZMIENIA",
-                    AmendmentOperationType.Error => "BŁĄD",
-                    _ => "NIEZNANY"
-                };
+                AmendmentOperationType.Repeal => "uchylenie",
+                AmendmentOperationType.Insertion => "dodanie",
+                AmendmentOperationType.Modification => "zmiana brzmienia",
+                AmendmentOperationType.Error => "błąd",
+                _ => "nieznany"
+            };
 
-                var targetAct = amendment.TargetLegalAct;
-                var targetActStr = targetAct.Positions.Count > 0
-                    ? $"DU.{targetAct.Year}.{string.Join(",", targetAct.Positions)}"
-                    : "brak publikatora";
+            var targetAct = amendment.TargetLegalAct;
+            var targetActStr = targetAct.Positions.Count > 0
+                ? $"DU.{targetAct.Year}.{string.Join(",", targetAct.Positions)}"
+                : "brak publikatora";
 
-                Console.WriteLine($"{indent}╔═ NOWELIZACJA #{i + 1}: {opLabel} → {targetActStr}");
+            Console.WriteLine($"{indent}╔═ {opLabel} w akcie: {targetActStr}");
 
-                foreach (var target in amendment.Targets)
-                {
-                    Console.WriteLine($"{indent}║  Cel: {target}");
-                }
-
-                if (amendment.Content != null)
-                {
-                    PrintAmendmentContent(amendment.Content, indent);
-                }
-
-                if (amendment.EffectiveDate.HasValue)
-                {
-                    Console.WriteLine($"{indent}║  Wejście w życie: {amendment.EffectiveDate.Value:yyyy-MM-dd}");
-                }
-
-                Console.WriteLine($"{indent}╚══════════════════════════════════════");
+            foreach (var target in amendment.Targets)
+            {
+                Console.WriteLine($"{indent}║  Cel: {target}");
             }
+
+            if (amendment.Content != null)
+            {
+                PrintAmendmentContent(amendment.Content, indent);
+            }
+
+            if (amendment.EffectiveDate.HasValue)
+            {
+                Console.WriteLine($"{indent}║  Wejście w życie: {amendment.EffectiveDate.Value:yyyy-MM-dd}");
+            }
+
+            Console.WriteLine($"{indent}╚══════════════════════════════════════");
         }
 
         private static void PrintAmendmentContent(AmendmentContent content, string indent)
