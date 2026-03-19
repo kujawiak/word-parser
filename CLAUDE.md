@@ -21,7 +21,7 @@ dotnet test WordParserCore.Tests/WordParserCore.Tests.csproj
 dotnet test WordParserCore.Tests/WordParserCore.Tests.csproj --filter "FullyQualifiedName~EIdTests"
 
 # Build wydania + Docker (inkrementuje build.number, wypycha do lokalnego rejestru)
-./build.ps1
+./build.sh
 ```
 
 ## Architektura
@@ -38,14 +38,16 @@ WordParserApi (zawieszony) ──► WordParserCore ──► ModelDto
 - `ModelDto` — czyste DTO, bez logiki biznesowej
 - `WordParserCore` — cała logika silnika parsowania; zależy od `DocumentFormat.OpenXml` i `Serilog`
 - `WordParser` — cienka nakładka CLI
+- `WordParserWeb` — aktywna aplikacja webowa ASP.NET 10 (renderowanie HTML dokumentów)
 - `WordParserApi` — zawieszony; nie rozwijaj tego projektu
 
 ### Hierarchia modelu dokumentu
 
 **Jednostki redakcyjne** (struktura treści):
 ```
-Article → Paragraph (Ustęp) → Point (Punkt) → Letter (Litera) → Tiret → DoubleTiret
+Article → Paragraph (Ustęp) → Point (Punkt) → Letter (Litera) → Tiret → Tiret (zagnieżdżony)
 ```
+Uwaga: „DoubleTiret" nie jest osobną klasą — to zagnieżdżona lista `Tiret.Tirets: List<Tiret>` w tej samej klasie `Tiret`.
 
 **Jednostki systematyzacyjne** (kontenery organizacyjne):
 ```
@@ -59,11 +61,11 @@ Part → Book → Title → Division → Chapter → Subchapter → [Articles]
 Punkt wejścia: `LegalDocumentParser.Parse(filePath)` → wywołuje `ParserOrchestrator`
 
 Etapy potoku:
-1. `ParagraphClassifier` — klasyfikuje każdy akapit przy użyciu 3 warstw (patrz niżej)
-2. Klasy `*Builder` (`ArticleBuilder`, `ParagraphBuilder`, `PointBuilder`, `LetterBuilder`, `TiretBuilder`) — wzorzec kaskadowy; buildery niższego poziomu zapewniają istnienie encji nadrzędnych
-3. `AmendmentCollector` / `AmendmentFinalizer` — wykrywają wyzwalacze nowelizacji, buforują treść, finalizują obiekty `Amendment`
-4. `NumberingHint` (obliczany przez orkiestrator) + `ParagraphClassifier` — walidują ciągłość numeracji podczas klasyfikacji; kara `NumberingBreakPenalty` obniża Confidence
-5. Stan przechowywany jest w `ParsingContext` przez cały czas parsowania
+1. `ParagraphClassifier` (w `Services/Classify/`) — klasyfikuje każdy akapit przy użyciu 3 warstw (patrz niżej)
+2. `StructureProcessor` — buduje encje domenowe delegując do klas `*Builder` (`ArticleBuilder`, `ParagraphBuilder`, `PointBuilder`, `LetterBuilder`, `TiretBuilder`, `AmendmentBuilder`) — wzorzec kaskadowy; buildery niższego poziomu zapewniają istnienie encji nadrzędnych
+3. `AmendmentStateManager` / `AmendmentCollector` / `AmendmentFinalizer` — wykrywają wyzwalacze nowelizacji, buforują treść, finalizują obiekty `Amendment`
+4. `NumberingHint` (w `Services/Classify/`) + `ParagraphClassifier` — walidują ciągłość numeracji podczas klasyfikacji; kara `NumberingBreakPenalty` obniża Confidence
+5. Stan przechowywany jest w `ParsingContext` przez cały czas parsowania; `ValidationReporter` zbiera komunikaty walidacji
 
 ### Klasyfikacja warstwowa (kluczowa zasada)
 
@@ -88,10 +90,13 @@ Reguła decyzyjna: wymagaj co najmniej 2 zgodnych sygnałów; gdy styl konfliktu
 |---|---|
 | `WordParserCore/LegalDocumentParser.cs` | Publiczny punkt wejścia |
 | `WordParserCore/Services/Parsing/ParserOrchestrator.cs` | Główny potok |
-| `WordParserCore/Services/Parsing/ParagraphClassifier.cs` | Logika klasyfikacji |
+| `WordParserCore/Services/Parsing/StructureProcessor.cs` | Buduje encje domenowe (deleguje do Builders) |
 | `WordParserCore/Services/Parsing/ParsingContext.cs` | Mutowalny stan parsera |
 | `WordParserCore/Services/Parsing/Builders/` | Buildery encji (wzorzec kaskadowy) |
+| `WordParserCore/Services/Classify/ParagraphClassifier.cs` | Logika klasyfikacji (3-warstwowa) |
+| `WordParserCore/Services/Classify/NumberingHint.cs` | Walidacja ciągłości numeracji |
 | `WordParserCore/Helpers/ParagraphExtensions.cs` | Bezpieczne helpery OpenXml (używaj rozszerzenia `.StyleId()`) |
+| `WordParserCore/Helpers/AmendmentStyleDecoder.cs` | Dekoduje style nowelizacji (`Z/*`, `ZZ*`, `Z_*`) |
 | `ModelDto/BaseEntity.cs` | Abstrakcyjna baza dla wszystkich encji domenowych |
 | `ModelDto/EntityNumber.cs` | Model numeru encji (NumericPart, LexicalPart, Superscript) |
 | `WordParserCore.Tests/` | Testy xUnit; artefakty testowe w podkatalogu `Artifacts/` |
@@ -110,5 +115,5 @@ Reguła decyzyjna: wymagaj co najmniej 2 zgodnych sygnałów; gdy styl konfliktu
 - Projekt testowy: `WordParserCore.Tests`
 - Framework: xUnit 2.9.3
 - Artefakty testowe (przykładowe pliki DOCX, oczekiwane wyniki) znajdują się w `WordParserCore.Tests/Artifacts/`
-- Kluczowe klasy testowe: `EIdTests`, `AmendmentFinalizerTests`, `ParagraphClassifierTests`, `NumberingHintTests`
+- Klasy testowe: `EIdTests`, `AmendmentFinalizerTests`, `AmendmentBuilderTests`, `AmendmentCollectorTests`, `AmendmentStyleDecoderTests`, `ParagraphClassifierTests`, `NumberingHintTests`, `ParsingBuildersTests`, `ParserOrchestratorAmendmentTests`, `ParserOrchestratorCommonPartTests`, `LegalReferenceServiceTests`, `JournalReferenceServiceTests`, `ContentStrippingTests`, `GetFullTextTests`, `SentenceSplittingTests`, `IntroCommonPartTests`, `ReferenceActTests`
 - Uruchomienie testów konkretnej klasy: `--filter "FullyQualifiedName~NazwaKlasy"`
