@@ -146,7 +146,7 @@ namespace WordParserCore.Tests
             Assert.Equal(ParagraphKind.Point, result.Kind);
             // Brak rozpoznanego stylu "Normalny" → kara StyleAbsent
             Assert.True(result.Confidence < 100);
-            Assert.True(ParagraphClassifier.PointNumberCapture.IsMatch("7)\tw art. 166 ust. 1 otrzymuje brzmienie:"));
+            Assert.Matches(ParagraphClassifier.PointNumberCapture, "7)\tw art. 166 ust. 1 otrzymuje brzmienie:");
             Assert.Equal("7", ParagraphClassifier.PointNumberCapture.Match("7)\tw art. 166 ust. 1 otrzymuje brzmienie:").Groups[1].Value);
         }
     }
