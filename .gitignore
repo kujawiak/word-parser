@@ -40,3 +40,6 @@ docs.*.md
 
 # === Repozytorium dokumentów roboczych ===
 DocRepo/
+
+# === Projekty zawieszone ===
+WordParserApi/
